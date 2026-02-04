@@ -63,7 +63,6 @@ const PRESET_GEAR_CATEGORIES: Record<string, string[]> = {
   ]
 };
 
-// Define Styles for each category
 const CATEGORY_STYLES: Record<string, { bg: string, border: string, text: string, icon: React.ReactNode, progress: string }> = {
   "帳篷寢具": { bg: "bg-indigo-50", border: "border-indigo-200", text: "text-indigo-800", icon: <Tent size={18}/>, progress: "bg-indigo-500" },
   "廚房烹飪": { bg: "bg-orange-50", border: "border-orange-200", text: "text-orange-800", icon: <ChefHat size={18}/>, progress: "bg-orange-500" },
@@ -91,7 +90,6 @@ const GearSection: React.FC<GearSectionProps> = ({ gearList, setGearList, curren
   const [targetCategory, setTargetCategory] = useState<'public' | 'personal'>('public');
   const [selectedPresets, setSelectedPresets] = useState<string[]>([]);
 
-  // Helper to detect category
   const detectCategory = (itemName: string): string => {
       for (const [category, items] of Object.entries(PRESET_GEAR_CATEGORIES)) {
           if (items.includes(itemName) || items.some(i => itemName.includes(i))) {
@@ -116,10 +114,6 @@ const GearSection: React.FC<GearSectionProps> = ({ gearList, setGearList, curren
     if(assignedUser !== undefined) setAssigningItemId(null);
   };
 
-  const handlePersonalCheck = (itemId: number | string) => {
-    setGearList(prev => prev.map(item => String(item.id) === String(itemId) ? { ...item, status: item.status === 'packed' ? 'pending' : 'packed' } : item));
-  };
-
   const togglePresetSelection = (itemName: string) => {
     setSelectedPresets(prev => prev.includes(itemName) ? prev.filter(i => i !== itemName) : [...prev, itemName]);
   };
@@ -128,12 +122,20 @@ const GearSection: React.FC<GearSectionProps> = ({ gearList, setGearList, curren
     const itemsToAdd: GearItem[] = [];
     const timestamp = Date.now();
     
-    // Add presets
+    // Logic update: If adding to personal, assign owner immediately to current user.
+    const ownerForNewItem = targetCategory === 'personal' ? { id: currentUser.id, name: currentUser.name } : null;
+
     selectedPresets.forEach((name, index) => {
-      itemsToAdd.push({ id: timestamp + index + Math.floor(Math.random() * 1000), name: name, category: targetCategory, owner: null, required: isNewItemRequired, isCustom: false });
+      itemsToAdd.push({ 
+          id: timestamp + index + Math.floor(Math.random() * 1000), 
+          name: name, 
+          category: targetCategory, 
+          owner: ownerForNewItem, 
+          required: isNewItemRequired, 
+          isCustom: false 
+      });
     });
     
-    // Add manual inputs (split by comma, space, or Chinese comma)
     if (customItemName.trim()) {
       const manualItems = customItemName.split(/[,，、\s]+/).filter(s => s.trim());
       manualItems.forEach((name, index) => {
@@ -141,7 +143,7 @@ const GearSection: React.FC<GearSectionProps> = ({ gearList, setGearList, curren
              id: timestamp + selectedPresets.length + 1 + index + Math.floor(Math.random() * 1000), 
              name: name.trim(), 
              category: targetCategory, 
-             owner: null, 
+             owner: ownerForNewItem, 
              required: isNewItemRequired, 
              isCustom: true 
          });
@@ -161,18 +163,14 @@ const GearSection: React.FC<GearSectionProps> = ({ gearList, setGearList, curren
   const handleDeleteItem = (itemId: number | string) => {
     const idStr = String(itemId);
     const item = gearList.find(i => String(i.id) === idStr);
-    
-    // Logic for "Mistake Deletion"
-    if (item && item.owner && item.owner.id !== currentUser.id) {
+    if (item && item.owner && item.owner.id !== currentUser.id && item.category === 'public') {
         if (!window.confirm(`⚠️ 注意：這是【${item.owner.name}】認領的裝備。\n\n確定要強制刪除嗎？`)) {
             return;
         }
     }
-    
     setGearList(prev => prev.filter(i => String(i.id) !== idStr));
   };
 
-  // Grouping Logic
   const publicGear = useMemo(() => {
       const grouped: Record<string, GearItem[]> = {};
       gearList.filter(g => g.category === 'public').forEach(item => {
@@ -183,28 +181,29 @@ const GearSection: React.FC<GearSectionProps> = ({ gearList, setGearList, curren
       return grouped;
   }, [gearList]);
 
+  // Logic update: Personal gear filters ONLY items owned by current user.
   const personalGear = useMemo(() => {
       const grouped: Record<string, GearItem[]> = {};
-      gearList.filter(g => g.category === 'personal').forEach(item => {
+      gearList
+        .filter(g => g.category === 'personal' && g.owner?.id === currentUser.id)
+        .forEach(item => {
           const cat = detectCategory(item.name);
           if(!grouped[cat]) grouped[cat] = [];
           grouped[cat].push(item);
       });
       return grouped;
-  }, [gearList]);
+  }, [gearList, currentUser.id]);
   
   const publicCount = gearList.filter(g => g.category === 'public').length;
-  const personalCount = gearList.filter(g => g.category === 'personal').length;
+  // Personal count shows count for CURRENT USER only
+  const personalCount = gearList.filter(g => g.category === 'personal' && g.owner?.id === currentUser.id).length;
 
-  // Calculate total items from presets + manual input split
   const manualCount = customItemName.trim() ? customItemName.split(/[,，、\s]+/).filter(s => s.trim()).length : 0;
   const totalItemsToAdd = selectedPresets.length + manualCount;
 
-  // Helper Component for Rendering a Group
   const RenderGroup: React.FC<{ category: string, items: GearItem[], type: 'public' | 'personal' }> = ({ category, items, type }) => {
       const style = CATEGORY_STYLES[category] || CATEGORY_STYLES["其他/自訂"];
       
-      // Calculate Progress
       const total = items.length;
       let progress = 0;
       let label = "";
@@ -214,9 +213,7 @@ const GearSection: React.FC<GearSectionProps> = ({ gearList, setGearList, curren
           progress = Math.round((claimed / total) * 100);
           label = `已認領 ${claimed}/${total}`;
       } else {
-          const packed = items.filter(i => i.status === 'packed').length;
-          progress = Math.round((packed / total) * 100);
-          label = `已準備 ${packed}/${total}`;
+          label = `共 ${total} 項`;
       }
 
       return (
@@ -232,9 +229,11 @@ const GearSection: React.FC<GearSectionProps> = ({ gearList, setGearList, curren
                       <div className="text-[10px] font-bold opacity-60 text-right">
                           {label}
                       </div>
-                      <div className="w-16 h-2 bg-white rounded-full border border-black/5 overflow-hidden">
-                          <div className={`h-full transition-all duration-500 ${style.progress}`} style={{ width: `${progress}%` }}></div>
-                      </div>
+                      {type === 'public' && (
+                          <div className="w-16 h-2 bg-white rounded-full border border-black/5 overflow-hidden">
+                              <div className={`h-full transition-all duration-500 ${style.progress}`} style={{ width: `${progress}%` }}></div>
+                          </div>
+                      )}
                   </div>
               </div>
               <div className="divide-y divide-black/5">
@@ -242,32 +241,25 @@ const GearSection: React.FC<GearSectionProps> = ({ gearList, setGearList, curren
                       const isMine = item.owner?.id === currentUser.id;
                       const isLocked = type === 'public' && !!item.owner && !isMine && !currentUser.isAdmin; 
                       const isAssigning = String(assigningItemId) === String(item.id);
-                      const canDelete = !item.owner || isMine || currentUser.isAdmin;
-                      const isPacked = item.status === 'packed';
+                      const canDelete = type === 'personal' || !item.owner || isMine || currentUser.isAdmin;
 
                       return (
                           <div key={item.id} 
                                className={`p-3 flex items-center justify-between transition-colors ${
-                                   type === 'personal' ? 'cursor-pointer hover:bg-black/5' : ''
-                               } ${
                                    type === 'public' && isMine ? 'bg-[#7BC64F]/10' : ''
-                               } ${
-                                   type === 'personal' && isPacked ? 'opacity-60 bg-gray-50' : ''
                                }`}
-                               onClick={() => type === 'personal' && handlePersonalCheck(item.id)}
                           >
-                              {/* Left Side: Name & Status */}
-                              <div className="flex items-center gap-3 flex-1 pr-2">
+                              <div className="flex items-center gap-3 flex-1 pr-2 min-w-0">
                                   {type === 'personal' && (
-                                      <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all flex-shrink-0 ${isPacked ? 'bg-[#219EBC] border-[#219EBC] text-white' : 'border-[#E0D8C0] bg-white'}`}>
-                                          {isPacked && <Check size={14} />}
+                                      <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all flex-shrink-0 border-[#E0D8C0] bg-white text-[#E0D8C0]`}>
+                                          <Grid size={12} />
                                       </div>
                                   )}
                                   
-                                  <div>
-                                      <div className={`font-bold text-sm text-[#5D4632] flex flex-wrap items-center gap-2 ${type === 'personal' && isPacked ? 'line-through text-[#8C7B65]' : ''}`}>
-                                          {item.required && <span className="text-[#E76F51]"><Star size={10} fill="currentColor"/></span>}
-                                          {item.name}
+                                  <div className="min-w-0">
+                                      <div className={`font-bold text-sm text-[#5D4632] flex items-center gap-2 truncate`}>
+                                          {item.required && <span className="text-[#E76F51] shrink-0"><Star size={10} fill="currentColor"/></span>}
+                                          <span className="truncate">{item.name}</span>
                                       </div>
                                       
                                       {type === 'public' && (
@@ -285,7 +277,6 @@ const GearSection: React.FC<GearSectionProps> = ({ gearList, setGearList, curren
                                   </div>
                               </div>
 
-                              {/* Right Side: Actions */}
                               <div className="flex items-center gap-2 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
                                   {type === 'public' && (
                                       isAssigning ? (
@@ -328,8 +319,6 @@ const GearSection: React.FC<GearSectionProps> = ({ gearList, setGearList, curren
 
   return (
     <div className="space-y-6 animate-fade-in pb-20">
-      
-      {/* 1. Public Gear */}
       <div className="bg-[#FFFEF5] rounded-3xl shadow-sm border border-[#E0D8C0] overflow-hidden">
         <div onClick={() => setIsPublicOpen(!isPublicOpen)} className="bg-[#F2CC8F]/30 px-5 py-4 border-b border-[#E0D8C0] flex justify-between items-center cursor-pointer hover:bg-[#F2CC8F]/40 transition-colors">
           <h3 className="font-bold text-[#5D4632] flex items-center gap-2 text-lg"><Tent size={20} className="text-[#F4A261]" />公用裝備認領<span className="text-sm font-normal text-[#8C7B65]">({publicCount})</span></h3>
@@ -348,20 +337,19 @@ const GearSection: React.FC<GearSectionProps> = ({ gearList, setGearList, curren
         )}
       </div>
 
-      {/* 2. Personal Gear */}
       <div className="bg-[#FFFEF5] rounded-3xl shadow-sm border border-[#E0D8C0] overflow-hidden">
         <div onClick={() => setIsPersonalOpen(!isPersonalOpen)} className="bg-[#8ECAE6]/30 px-5 py-4 border-b border-[#E0D8C0] flex justify-between items-center cursor-pointer hover:bg-[#8ECAE6]/40 transition-colors">
-          <h3 className="font-bold text-[#5D4632] flex items-center gap-2 text-lg"><User size={20} className="text-[#219EBC]" />個人裝備 (僅自己可見)<span className="text-sm font-normal text-[#8C7B65]">({personalCount})</span></h3>
+          <h3 className="font-bold text-[#5D4632] flex items-center gap-2 text-lg"><User size={20} className="text-[#219EBC]" />個人裝備清單<span className="text-sm font-normal text-[#8C7B65]">({personalCount})</span></h3>
           <div className="text-[#8C7B65]">{isPersonalOpen ? <ChevronUp size={20} /> : <ChevronDown size={20} />}</div>
         </div>
         
         {isPersonalOpen && (
           <div className={`p-4 space-y-3 max-h-[600px] ${SCROLLBAR_STYLE}`}>
             <div className="text-xs text-[#8C7B65] bg-[#F9F7F2] p-2 rounded-xl mb-2 flex items-center gap-2">
-                <AlertCircle size={14}/> 這裡的裝備是「每個人都要帶」的清單，只有您自己看得到勾選狀態。
+                <AlertCircle size={14}/> 這是您個人的專屬清單，新增的項目只有您自己看得到。
             </div>
             
-            {personalCount === 0 && ( <div className="text-center text-[#8C7B65] text-sm italic p-2">目前清單是空的，請從下方新增</div> )}
+            {personalCount === 0 && ( <div className="text-center text-[#8C7B65] text-sm italic p-2">目前清單是空的，請從下方新增您的個人裝備</div> )}
 
             {orderedCategories.map(cat => {
                 if (!personalGear[cat] || personalGear[cat].length === 0) return null;
@@ -371,7 +359,6 @@ const GearSection: React.FC<GearSectionProps> = ({ gearList, setGearList, curren
         )}
       </div>
 
-      {/* 3. Add Form */}
       <div className="bg-[#FFFEF5] rounded-3xl shadow-sm border border-[#E0D8C0] overflow-hidden">
         <div className="p-4">
             {showAddForm ? (
@@ -382,7 +369,7 @@ const GearSection: React.FC<GearSectionProps> = ({ gearList, setGearList, curren
                 </div>
                 <div className="flex gap-2 bg-white/50 p-1.5 rounded-2xl border border-[#E0D8C0]/50">
                    <button onClick={() => setTargetCategory('public')} className={`flex-1 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all ${targetCategory === 'public' ? 'bg-[#F4A261] text-white shadow-sm' : 'bg-white text-[#8C7B65] border border-[#E0D8C0] hover:bg-[#F9F7F2]'}`}><Tent size={14} /> 公用 (需認領)</button>
-                   <button onClick={() => setTargetCategory('personal')} className={`flex-1 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all ${targetCategory === 'personal' ? 'bg-[#219EBC] text-white shadow-sm' : 'bg-white text-[#8C7B65] border border-[#E0D8C0] hover:bg-[#F9F7F2]'}`}><User size={14} /> 個人 (各自帶)</button>
+                   <button onClick={() => setTargetCategory('personal')} className={`flex-1 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all ${targetCategory === 'personal' ? 'bg-[#219EBC] text-white shadow-sm' : 'bg-white text-[#8C7B65] border border-[#E0D8C0] hover:bg-[#F9F7F2]'}`}><User size={14} /> 個人 (我的清單)</button>
                 </div>
                 <div className="relative">
                   <select value={selectedCategory} onChange={(e) => setSelectedCategory(e.target.value)} className="w-full appearance-none bg-white border-2 border-[#E0D8C0] text-[#5D4632] font-bold text-sm rounded-xl py-2.5 pl-4 pr-10 focus:outline-none focus:border-[#7BC64F] transition-colors">{Object.keys(PRESET_GEAR_CATEGORIES).map(cat => ( <option key={cat} value={cat}>{cat}</option> ))}</select>

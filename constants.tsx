@@ -3,8 +3,6 @@ import { Bill, GearItem, Ingredient, User, TripInfo } from './types';
 // REMOVED CURRENT_USER export. 
 // User state is now managed in App.tsx and passed down via props.
 
-export const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbzlMOChRe44h9iSLGl54dLvTYX3-2uMam-C_nt4LZQu3EkV1yZWNQbBwtFt8fOFpIiKdA/exec';
-
 export const TRIP_INFO: TripInfo = {
   title: '無人島移居計畫 (露營)',
   date: '日期未定',
