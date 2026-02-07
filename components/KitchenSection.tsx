@@ -68,10 +68,18 @@ const KitchenSection: React.FC<KitchenSectionProps> = ({ ingredients, setIngredi
 
   const saveEditing = (id: number) => {
       if (editIngName.trim()) {
+          // Update Ingredients
           setIngredients(prev => prev.map(ing => ing.id === id ? { ...ing, name: editIngName } : ing));
-          // Also update name in MealPlan checklist if linked? 
-          // (Usually sync is one-way or by ID, but for display name consistency we might want to, 
-          // but ChecklistItem name is separate. Let's keep it simple for now and just update Ingredient.)
+          
+          // Update MealPlans (Sync name change to menu)
+          setMealPlans(prev => prev.map(plan => ({
+              ...plan,
+              checklist: plan.checklist.map(item => 
+                  item.sourceIngredientId === id 
+                      ? { ...item, name: editIngName }
+                      : item
+              )
+          })));
       }
       setEditingIngId(null);
   };

@@ -25,6 +25,10 @@ const MenuSection: React.FC<MenuSectionProps> = ({ mealPlans, setMealPlans, memb
   const [editingPlanId, setEditingPlanId] = useState<number | null>(null);
   const [editPlanName, setEditPlanName] = useState('');
 
+  // Edit Checklist Item State
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [editItemName, setEditItemName] = useState('');
+
   const toggleExpand = (planId: number | string) => {
     const idStr = String(planId);
     setExpandedPlans(prev => ({ ...prev, [idStr]: !prev[idStr] }));
@@ -40,6 +44,27 @@ const MenuSection: React.FC<MenuSectionProps> = ({ mealPlans, setMealPlans, memb
           setMealPlans(prev => prev.map(p => p.id === planId ? { ...p, menuName: editPlanName } : p));
       }
       setEditingPlanId(null);
+  };
+
+  const startEditingItem = (item: CheckItem) => {
+      setEditingItemId(item.id);
+      setEditItemName(item.name);
+  };
+
+  const saveEditingItem = (planId: number, itemId: string, sourceIngId: number | null) => {
+      if (editItemName.trim()) {
+          // Update MealPlan
+          setMealPlans(prev => prev.map(p => p.id === planId ? {
+              ...p,
+              checklist: p.checklist.map(i => i.id === itemId ? { ...i, name: editItemName } : i)
+          } : p));
+
+          // Update Ingredient (Sync to Kitchen)
+          if (sourceIngId) {
+               setIngredients(prev => prev.map(ing => ing.id === sourceIngId ? { ...ing, name: editItemName } : ing));
+          }
+      }
+      setEditingItemId(null);
   };
 
   // Helper for Distinct Meal Colors (Backgrounds & Text)
@@ -350,14 +375,39 @@ const MenuSection: React.FC<MenuSectionProps> = ({ mealPlans, setMealPlans, memb
                     <div className="space-y-2 mb-4">
                         {plan.checklist.map((item) => {
                             const isItemMine = item.owner?.name === currentUser.name;
+                            const isEditingItem = editingItemId === item.id;
+
                             return (
-                                <div key={item.id} className="flex items-center justify-between gap-2 p-2 rounded-xl bg-white border border-[#E0D8C0]/30 shadow-sm">
-                                    <div className="flex items-center gap-2 flex-1">
-                                        <div className="w-6 h-6 rounded-full border border-[#E0D8C0] flex items-center justify-center text-xs bg-[#F9F7F2]">{item.owner?.avatar || <Package size={12} className="text-[#8C7B65]" />}</div>
-                                        <span className="text-sm font-bold text-[#5D4632]">{item.name}</span>
-                                        {item.quantity && <span className="text-[10px] text-[#8C7B65] font-mono">({item.quantity})</span>}
+                                <div key={item.id} className="flex items-center justify-between gap-2 p-2 rounded-xl bg-white border border-[#E0D8C0]/30 shadow-sm group">
+                                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                                        <div className="w-6 h-6 rounded-full border border-[#E0D8C0] flex items-center justify-center text-xs bg-[#F9F7F2] shrink-0">{item.owner?.avatar || <Package size={12} className="text-[#8C7B65]" />}</div>
+                                        
+                                        {isEditingItem ? (
+                                            <div className="flex items-center gap-2 flex-1">
+                                                <input 
+                                                    type="text"
+                                                    value={editItemName}
+                                                    onChange={(e) => setEditItemName(e.target.value)}
+                                                    className="w-full bg-[#F9F7F2] border border-[#7BC64F] rounded px-2 py-1 text-xs outline-none"
+                                                    autoFocus
+                                                    onKeyDown={(e) => e.key === 'Enter' && saveEditingItem(plan.id, item.id, item.sourceIngredientId)}
+                                                />
+                                                <button onClick={() => saveEditingItem(plan.id, item.id, item.sourceIngredientId)} className="bg-[#7BC64F] text-white p-1 rounded"><Check size={12}/></button>
+                                            </div>
+                                        ) : (
+                                            <div className="flex items-center gap-2 overflow-hidden">
+                                                <span className="text-sm font-bold text-[#5D4632] truncate">{item.name}</span>
+                                                {item.quantity && <span className="text-[10px] text-[#8C7B65] font-mono shrink-0">({item.quantity})</span>}
+                                                <button 
+                                                    onClick={() => startEditingItem(item)} 
+                                                    className="opacity-0 group-hover:opacity-100 text-[#E0D8C0] hover:text-[#7BC64F] p-0.5 transition-opacity"
+                                                >
+                                                    <Edit3 size={10} />
+                                                </button>
+                                            </div>
+                                        )}
                                     </div>
-                                    <div className="flex items-center gap-1">
+                                    <div className="flex items-center gap-1 shrink-0">
                                         {!isSnack && (
                                             <button 
                                                 onClick={() => {
