@@ -13,7 +13,8 @@ import {
   RefreshCw,
   Backpack,
   Image as ImageIcon,
-  AlertTriangle
+  AlertTriangle,
+  HelpCircle
 } from 'lucide-react';
 import { 
   INITIAL_GEAR, 
@@ -34,6 +35,7 @@ import SelfCheckSection from './components/SelfCheckSection';
 import BillSection from './components/BillSection';
 import AlbumSection from './components/AlbumSection';
 import SettingsModal from './components/SettingsModal';
+import ManualModal from './components/ManualModal';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -50,6 +52,7 @@ export default function App() {
   const [checkedReturn, setCheckedReturn] = useState<Record<string, boolean>>({});
 
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [isManualModalOpen, setIsManualModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncError, setSyncError] = useState(false);
@@ -175,7 +178,8 @@ export default function App() {
                   <div key={i} className={`relative flex items-center justify-center rounded-full shadow-sm ${m.id === currentUser.id ? 'w-12 h-12 text-2xl bg-white border-4 border-[#F4A261] z-10' : 'w-8 h-8 text-xs bg-[#E9F5D8] border-2 border-[#7BC64F]'}`} title={m.name}>{m.avatar}</div>
                 ))}
               </div>
-              <button onClick={() => setIsSettingsModalOpen(true)} className="bg-[#5da135] p-2 rounded-full text-[#F2CC8F]"><Settings size={18} /></button>
+              <button onClick={() => setIsManualModalOpen(true)} className="bg-[#F4A261] p-2 rounded-full text-white hover:bg-[#E76F51] transition-colors shadow-sm"><HelpCircle size={18} /></button>
+              <button onClick={() => setIsSettingsModalOpen(true)} className="bg-[#5da135] p-2 rounded-full text-[#F2CC8F] hover:bg-[#4a8a2a] transition-colors shadow-sm"><Settings size={18} /></button>
             </div>
           </div>
           <h1 className="text-2xl font-extrabold flex items-center gap-2"><Leaf size={24} className="text-[#F7DC6F]" fill="currentColor" />{tripInfo.title}</h1>
@@ -205,6 +209,7 @@ export default function App() {
       </div>
       
       <SettingsModal isOpen={isSettingsModalOpen} onClose={() => setIsSettingsModalOpen(false)} members={members} setMembers={setMembers} tripInfo={tripInfo} setTripInfo={setTripInfo} currentUser={currentUser} onManualSave={handleManualSave} onRefreshData={loadData} />
+      <ManualModal isOpen={isManualModalOpen} onClose={() => setIsManualModalOpen(false)} />
 
       <div className="text-center mt-8 pb-10 text-[10px] text-[#8C7B65] font-bold flex flex-col items-center gap-2">
         <span>目前登入: {currentUser.name} {currentUser.avatar}</span>
