@@ -25,6 +25,7 @@ export interface GearItem {
   id: number;
   name: string;
   category: 'public' | 'personal';
+  subCategory?: string; // New: Manual sub-category assignment
   owner: { id: string; name: string } | null;
   required: boolean;
   status?: 'pending' | 'packed';

@@ -29,23 +29,13 @@ const SelfCheckSection: React.FC<SelfCheckSectionProps> = ({
   const checkedItems = mode === 'departure' ? checkedDeparture : checkedReturn;
   const setCheckedItems = mode === 'departure' ? setCheckedDeparture : setCheckedReturn;
 
-  // Split Gear by Category
-  const publicGear = gearList.filter(item => item.category === 'public').sort((a, b) => {
-      // Sort: Mine first, then Others, then Unclaimed
-      const aIsMine = a.owner?.id === currentUser.id;
-      const bIsMine = b.owner?.id === currentUser.id;
-      const aHasOwner = !!a.owner;
-      const bHasOwner = !!b.owner;
+  // Split Gear by Category & Filter for Current User Only
+  // The user wants the checklist to be PERSONAL. 
+  // So for Public Gear, only show items claimed by the current user.
+  const myPublicGear = gearList.filter(item => item.category === 'public' && item.owner?.id === currentUser.id);
 
-      if (aIsMine && !bIsMine) return -1;
-      if (!aIsMine && bIsMine) return 1;
-      if (aHasOwner && !bHasOwner) return -1;
-      if (!aHasOwner && bHasOwner) return 1;
-      return 0;
-  });
-
-  // Updated: Personal Gear is now specific to the user. Only show items owned by currentUser.
-  const personalGear = gearList.filter(item => item.category === 'personal' && item.owner?.id === currentUser.id);
+  // Personal Gear is strictly filtered to current user in GearSection, so we trust it here too.
+  const myPersonalGear = gearList.filter(item => item.category === 'personal' && item.owner?.id === currentUser.id);
    
   // Filter ingredients owned by current user
   const myIngredients = ingredients.filter(item => item.owner && item.owner.id === currentUser.id);
@@ -57,18 +47,13 @@ const SelfCheckSection: React.FC<SelfCheckSectionProps> = ({
     }));
   };
 
-  // Calculate stats for render
-  const myPublicGear = publicGear.filter(g => g.owner?.id === currentUser.id);
-  const myPersonalGear = personalGear; 
-  const myIngredientsList = ingredients.filter(item => item.owner && item.owner.id === currentUser.id);
-
-  const totalItems = myPublicGear.length + myPersonalGear.length + myIngredientsList.length;
+  const totalItems = myPublicGear.length + myPersonalGear.length + myIngredients.length;
   
   const checkedCount = [
         ...myPublicGear,
         ...myPersonalGear
     ].filter(item => checkedItems[`gear-${item.id}`]).length + 
-    myIngredientsList.filter(item => checkedItems[`food-${item.id}`]).length;
+    myIngredients.filter(item => checkedItems[`food-${item.id}`]).length;
 
   const progressPercent = totalItems > 0 ? Math.round((checkedCount / totalItems) * 100) : 0;
 
@@ -139,48 +124,42 @@ const SelfCheckSection: React.FC<SelfCheckSectionProps> = ({
         </div>
       </div>
 
-      {/* 1. 公用裝備區塊 */}
+      {/* 1. 公用裝備區塊 (只顯示我自己負責的) */}
       <div className="bg-[#FFFEF5] rounded-3xl shadow-sm border border-[#E0D8C0] overflow-hidden">
         <div className="bg-[#8ECAE6]/20 px-5 py-4 border-b border-[#E0D8C0]">
           <h4 className="font-bold text-[#5D4632] flex items-center gap-2 text-lg">
             <Tent size={20} className="text-[#219EBC]" />
-            公用裝備 ({publicGear.length})
+            我負責的公用裝備 ({myPublicGear.length})
           </h4>
         </div>
         <div className="divide-y divide-[#E0D8C0]">
-          {publicGear.length > 0 ? publicGear.map(item => {
-            const isOthers = item.owner && item.owner.id !== currentUser.id;
-            const isMine = item.owner?.id === currentUser.id;
+          {myPublicGear.length > 0 ? myPublicGear.map(item => {
+            const isMine = true; // Filtered to current user
             const isChecked = checkedItems[`gear-${item.id}`];
-            const ownerAvatar = (item.owner as any)?.avatar || '👤';
-
+            
             return (
               <div 
                 key={`gear-${item.id}`} 
-                onClick={() => { if (isMine) toggleCheck(`gear-${item.id}`); }}
-                className={`p-4 flex items-center gap-3 transition-colors ${isOthers ? 'bg-white cursor-default' : 'cursor-pointer active:bg-[#E0D8C0]/30 hover:bg-[#F9F7F2]'} ${isMine && isChecked ? 'bg-[#E0D8C0]/20' : ''}`}
+                onClick={() => toggleCheck(`gear-${item.id}`)}
+                className={`p-4 flex items-center gap-3 transition-colors cursor-pointer active:bg-[#E0D8C0]/30 hover:bg-[#F9F7F2] ${isChecked ? 'bg-[#E0D8C0]/20' : ''}`}
               >
-                <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all flex-shrink-0 ${isChecked ? (isDeparture ? 'bg-[#219EBC] border-[#219EBC]' : 'bg-[#E76F51] border-[#E76F51]') : (isOthers ? 'border-[#E0D8C0] bg-[#F5F5F5] opacity-50' : 'border-[#E0D8C0] bg-white')}`}>
+                <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all flex-shrink-0 ${isChecked ? (isDeparture ? 'bg-[#219EBC] border-[#219EBC]' : 'bg-[#E76F51] border-[#E76F51]') : 'border-[#E0D8C0] bg-white'}`}>
                   {isChecked && <Check size={18} className="text-white" />}
                 </div>
                 <div className="flex-1">
-                  <div className={`font-bold text-base flex items-center gap-2 ${isChecked ? 'text-[#8C7B65] line-through' : 'text-[#5D4632]'} ${isOthers ? 'opacity-80' : ''}`}>
+                  <div className={`font-bold text-base flex items-center gap-2 ${isChecked ? 'text-[#8C7B65] line-through' : 'text-[#5D4632]'}`}>
                     {item.name}
                   </div>
                   <div className="flex gap-1 mt-0.5">
-                    {item.owner ? (
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1 ${isOthers ? 'bg-[#E0D8C0]/50 text-[#8C7B65]' : 'bg-[#8ECAE6]/30 text-[#219EBC] font-bold'}`}>
-                            {ownerAvatar} {isMine ? '我負責' : `${item.owner.name} 負責`}
-                        </span>
-                    ) : (
-                        <span className="text-[10px] bg-[#F4A261]/20 text-[#E76F51] px-2 py-0.5 rounded-full font-bold">尚未認領</span>
-                    )}
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1 bg-[#8ECAE6]/30 text-[#219EBC] font-bold`}>
+                        我負責
+                    </span>
                   </div>
                 </div>
               </div>
             );
           }) : (
-            <div className="p-8 text-center text-[#8C7B65] text-sm">目前沒有公用裝備。</div>
+            <div className="p-8 text-center text-[#8C7B65] text-sm">沒有需要您負責的公用裝備。</div>
           )}
         </div>
       </div>
@@ -190,11 +169,11 @@ const SelfCheckSection: React.FC<SelfCheckSectionProps> = ({
         <div className="bg-[#F4A261]/20 px-5 py-4 border-b border-[#E0D8C0]">
           <h4 className="font-bold text-[#5D4632] flex items-center gap-2 text-lg">
             <Backpack size={20} className="text-[#E76F51]" />
-            個人裝備 ({personalGear.length})
+            個人裝備 ({myPersonalGear.length})
           </h4>
         </div>
         <div className="divide-y divide-[#E0D8C0]">
-          {personalGear.length > 0 ? personalGear.map(item => {
+          {myPersonalGear.length > 0 ? myPersonalGear.map(item => {
              const isChecked = checkedItems[`gear-${item.id}`];
              return (
               <div key={`gear-${item.id}`} onClick={() => toggleCheck(`gear-${item.id}`)} className={`p-4 flex items-center gap-3 cursor-pointer transition-colors active:bg-[#E0D8C0]/30 ${isChecked ? 'bg-[#E0D8C0]/20' : 'hover:bg-[#F9F7F2]'}`}>

@@ -90,6 +90,13 @@ const GearSection: React.FC<GearSectionProps> = ({ gearList, setGearList, curren
   const [targetCategory, setTargetCategory] = useState<'public' | 'personal'>('public');
   const [selectedPresets, setSelectedPresets] = useState<string[]>([]);
 
+  // State for collapsible categories in Public Gear
+  const [openCategories, setOpenCategories] = useState<Record<string, boolean>>({});
+
+  const toggleCategory = (cat: string) => {
+      setOpenCategories(prev => ({ ...prev, [cat]: !prev[cat] }));
+  };
+
   const detectCategory = (itemName: string): string => {
       for (const [category, items] of Object.entries(PRESET_GEAR_CATEGORIES)) {
           if (items.includes(itemName) || items.some(i => itemName.includes(i))) {
@@ -122,20 +129,22 @@ const GearSection: React.FC<GearSectionProps> = ({ gearList, setGearList, curren
     const itemsToAdd: GearItem[] = [];
     const timestamp = Date.now();
     
-    // Logic update: If adding to personal, assign owner immediately to current user.
     const ownerForNewItem = targetCategory === 'personal' ? { id: currentUser.id, name: currentUser.name } : null;
 
+    // Presets (Auto Category)
     selectedPresets.forEach((name, index) => {
       itemsToAdd.push({ 
           id: timestamp + index + Math.floor(Math.random() * 1000), 
           name: name, 
           category: targetCategory, 
+          subCategory: selectedCategory, // Use the dropdown category for presets too, mostly acts as confirmation
           owner: ownerForNewItem, 
           required: isNewItemRequired, 
           isCustom: false 
       });
     });
     
+    // Custom Items (Manual Category)
     if (customItemName.trim()) {
       const manualItems = customItemName.split(/[,，、\s]+/).filter(s => s.trim());
       manualItems.forEach((name, index) => {
@@ -143,6 +152,7 @@ const GearSection: React.FC<GearSectionProps> = ({ gearList, setGearList, curren
              id: timestamp + selectedPresets.length + 1 + index + Math.floor(Math.random() * 1000), 
              name: name.trim(), 
              category: targetCategory, 
+             subCategory: selectedCategory, // Explicitly assign the selected category
              owner: ownerForNewItem, 
              required: isNewItemRequired, 
              isCustom: true 
@@ -153,6 +163,10 @@ const GearSection: React.FC<GearSectionProps> = ({ gearList, setGearList, curren
     if (itemsToAdd.length === 0) return;
     
     setGearList([...gearList, ...itemsToAdd]);
+    
+    // Auto-open the category we just added to
+    setOpenCategories(prev => ({ ...prev, [selectedCategory]: true }));
+
     if (targetCategory === 'public') setIsPublicOpen(true);
     if (targetCategory === 'personal') setIsPersonalOpen(true);
     setCustomItemName('');
@@ -174,20 +188,20 @@ const GearSection: React.FC<GearSectionProps> = ({ gearList, setGearList, curren
   const publicGear = useMemo(() => {
       const grouped: Record<string, GearItem[]> = {};
       gearList.filter(g => g.category === 'public').forEach(item => {
-          const cat = detectCategory(item.name);
+          // Use subCategory if available (manual override), otherwise fallback to detection
+          const cat = item.subCategory || detectCategory(item.name);
           if(!grouped[cat]) grouped[cat] = [];
           grouped[cat].push(item);
       });
       return grouped;
   }, [gearList]);
 
-  // Logic update: Personal gear filters ONLY items owned by current user.
   const personalGear = useMemo(() => {
       const grouped: Record<string, GearItem[]> = {};
       gearList
         .filter(g => g.category === 'personal' && g.owner?.id === currentUser.id)
         .forEach(item => {
-          const cat = detectCategory(item.name);
+          const cat = item.subCategory || detectCategory(item.name);
           if(!grouped[cat]) grouped[cat] = [];
           grouped[cat].push(item);
       });
@@ -195,7 +209,6 @@ const GearSection: React.FC<GearSectionProps> = ({ gearList, setGearList, curren
   }, [gearList, currentUser.id]);
   
   const publicCount = gearList.filter(g => g.category === 'public').length;
-  // Personal count shows count for CURRENT USER only
   const personalCount = gearList.filter(g => g.category === 'personal' && g.owner?.id === currentUser.id).length;
 
   const manualCount = customItemName.trim() ? customItemName.split(/[,，、\s]+/).filter(s => s.trim()).length : 0;
@@ -216,9 +229,15 @@ const GearSection: React.FC<GearSectionProps> = ({ gearList, setGearList, curren
           label = `共 ${total} 項`;
       }
 
+      // Determine open state: Personal is always open (as it's a smaller list usually), Public is toggleable
+      const isOpen = type === 'personal' ? true : openCategories[category];
+
       return (
-          <div className={`mb-4 rounded-2xl overflow-hidden border ${style.border} ${style.bg}`}>
-              <div className={`px-4 py-2 flex items-center justify-between border-b ${style.border} bg-white/50`}>
+          <div className={`mb-4 rounded-2xl overflow-hidden border ${style.border} ${style.bg} transition-all`}>
+              <div 
+                  onClick={() => type === 'public' && toggleCategory(category)}
+                  className={`px-4 py-2 flex items-center justify-between border-b ${style.border} bg-white/50 ${type === 'public' ? 'cursor-pointer hover:bg-white/80' : ''}`}
+              >
                   <div className="flex items-center gap-2">
                       <div className={`p-1.5 rounded-full bg-white border ${style.border} ${style.text}`}>
                           {style.icon}
@@ -230,87 +249,95 @@ const GearSection: React.FC<GearSectionProps> = ({ gearList, setGearList, curren
                           {label}
                       </div>
                       {type === 'public' && (
-                          <div className="w-16 h-2 bg-white rounded-full border border-black/5 overflow-hidden">
-                              <div className={`h-full transition-all duration-500 ${style.progress}`} style={{ width: `${progress}%` }}></div>
+                          <div className="flex items-center gap-2">
+                            <div className="w-16 h-2 bg-white rounded-full border border-black/5 overflow-hidden">
+                                <div className={`h-full transition-all duration-500 ${style.progress}`} style={{ width: `${progress}%` }}></div>
+                            </div>
+                            <div className={`transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`}>
+                                <ChevronDown size={16} className="text-[#8C7B65]"/>
+                            </div>
                           </div>
                       )}
                   </div>
               </div>
-              <div className="divide-y divide-black/5">
-                  {items.map(item => {
-                      const isMine = item.owner?.id === currentUser.id;
-                      const isLocked = type === 'public' && !!item.owner && !isMine && !currentUser.isAdmin; 
-                      const isAssigning = String(assigningItemId) === String(item.id);
-                      const canDelete = type === 'personal' || !item.owner || isMine || currentUser.isAdmin;
+              
+              {isOpen && (
+                  <div className="divide-y divide-black/5 animate-fade-in">
+                      {items.map(item => {
+                          const isMine = item.owner?.id === currentUser.id;
+                          const isLocked = type === 'public' && !!item.owner && !isMine && !currentUser.isAdmin; 
+                          const isAssigning = String(assigningItemId) === String(item.id);
+                          const canDelete = type === 'personal' || !item.owner || isMine || currentUser.isAdmin;
 
-                      return (
-                          <div key={item.id} 
-                               className={`p-3 flex items-center justify-between transition-colors ${
-                                   type === 'public' && isMine ? 'bg-[#7BC64F]/10' : ''
-                               }`}
-                          >
-                              <div className="flex items-center gap-3 flex-1 pr-2 min-w-0">
-                                  {type === 'personal' && (
-                                      <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all flex-shrink-0 border-[#E0D8C0] bg-white text-[#E0D8C0]`}>
-                                          <Grid size={12} />
-                                      </div>
-                                  )}
-                                  
-                                  <div className="min-w-0">
-                                      <div className={`font-bold text-sm text-[#5D4632] flex items-center gap-2 truncate`}>
-                                          {item.required && <span className="text-[#E76F51] shrink-0"><Star size={10} fill="currentColor"/></span>}
-                                          <span className="truncate">{item.name}</span>
-                                      </div>
-                                      
-                                      {type === 'public' && (
-                                          <div className="text-xs mt-1 flex items-center gap-1">
-                                              {item.owner ? (
-                                                  <span className={`px-2 py-0.5 rounded-full flex items-center gap-1 ${isMine ? 'bg-[#7BC64F]/20 text-[#38661d]' : 'bg-[#E0D8C0]/50 text-[#5D4632]'}`}>
-                                                      {isLocked && <Lock size={10} />}
-                                                      {item.owner.name}
-                                                  </span>
-                                              ) : (
-                                                  <span className="text-[#F4A261] font-bold bg-[#F4A261]/10 px-2 py-0.5 rounded-full text-[10px]">🔴 待認領</span>
-                                              )}
+                          return (
+                              <div key={item.id} 
+                                   className={`p-3 flex items-center justify-between transition-colors ${
+                                       type === 'public' && isMine ? 'bg-[#7BC64F]/10' : ''
+                                   }`}
+                              >
+                                  <div className="flex items-center gap-3 flex-1 pr-2 min-w-0">
+                                      {type === 'personal' && (
+                                          <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all flex-shrink-0 border-[#E0D8C0] bg-white text-[#E0D8C0]`}>
+                                              <Grid size={12} />
                                           </div>
+                                      )}
+                                      
+                                      <div className="min-w-0">
+                                          <div className={`font-bold text-sm text-[#5D4632] flex items-center gap-2 truncate`}>
+                                              {item.required && <span className="text-[#E76F51] shrink-0"><Star size={10} fill="currentColor"/></span>}
+                                              <span className="truncate">{item.name}</span>
+                                          </div>
+                                          
+                                          {type === 'public' && (
+                                              <div className="text-xs mt-1 flex items-center gap-1">
+                                                  {item.owner ? (
+                                                      <span className={`px-2 py-0.5 rounded-full flex items-center gap-1 ${isMine ? 'bg-[#7BC64F]/20 text-[#38661d]' : 'bg-[#E0D8C0]/50 text-[#5D4632]'}`}>
+                                                          {isLocked && <Lock size={10} />}
+                                                          {item.owner.name}
+                                                      </span>
+                                                  ) : (
+                                                      <span className="text-[#F4A261] font-bold bg-[#F4A261]/10 px-2 py-0.5 rounded-full text-[10px]">🔴 待認領</span>
+                                                  )}
+                                              </div>
+                                          )}
+                                      </div>
+                                  </div>
+
+                                  <div className="flex items-center gap-2 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                                      {type === 'public' && (
+                                          isAssigning ? (
+                                              <div className="absolute right-4 bg-white shadow-xl border-2 border-[#E76F51] rounded-2xl p-2 z-20 flex gap-2 items-center animate-fade-in max-w-[250px] overflow-x-auto">
+                                                  <button onClick={() => handleClaim(item.id, null)} className="w-8 h-8 rounded-full bg-[#E0D8C0] text-white flex items-center justify-center shrink-0 hover:bg-[#E76F51]"><Ban size={14} /></button>
+                                                  {members.map(m => ( <button key={m.id} onClick={() => handleClaim(item.id, { id: m.id, name: m.name })} className="w-8 h-8 rounded-full bg-[#E9F5D8] border border-[#7BC64F] text-sm shrink-0 hover:scale-110 transition-transform">{m.avatar}</button> ))}
+                                                  <button onClick={() => setAssigningItemId(null)} className="ml-1 text-[#8C7B65]"><X size={16}/></button>
+                                              </div>
+                                          ) : (
+                                              <button 
+                                                  onClick={() => { if (currentUser.isAdmin) { setAssigningItemId(String(item.id)); } else { handleClaim(item.id); } }} 
+                                                  disabled={isLocked} 
+                                                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm active:scale-95 ${isMine ? 'bg-white border-2 border-[#7BC64F] text-[#7BC64F]' : item.owner && currentUser.isAdmin ? 'bg-[#E76F51] text-white' : isLocked ? 'bg-[#E0D8C0] text-white cursor-not-allowed' : 'bg-[#F4A261] text-white'}`}
+                                              >
+                                                  {isMine ? '取消' : (item.owner && currentUser.isAdmin) ? '指派' : isLocked ? '鎖定' : '我帶'}
+                                              </button>
+                                          )
+                                      )}
+
+                                      {canDelete && (
+                                          <button 
+                                              type="button"
+                                              onClick={() => handleDeleteItem(item.id)}
+                                              className={`p-2 rounded-full transition-all cursor-pointer hover:bg-red-50 group ${!item.owner ? 'text-[#E0D8C0] hover:text-[#E76F51]' : 'text-[#E76F51]'}`}
+                                              title="刪除"
+                                          >
+                                              <Trash2 size={16} className={!item.owner ? '' : 'fill-current'}/>
+                                          </button>
                                       )}
                                   </div>
                               </div>
-
-                              <div className="flex items-center gap-2 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-                                  {type === 'public' && (
-                                      isAssigning ? (
-                                          <div className="absolute right-4 bg-white shadow-xl border-2 border-[#E76F51] rounded-2xl p-2 z-20 flex gap-2 items-center animate-fade-in max-w-[250px] overflow-x-auto">
-                                              <button onClick={() => handleClaim(item.id, null)} className="w-8 h-8 rounded-full bg-[#E0D8C0] text-white flex items-center justify-center shrink-0 hover:bg-[#E76F51]"><Ban size={14} /></button>
-                                              {members.map(m => ( <button key={m.id} onClick={() => handleClaim(item.id, { id: m.id, name: m.name })} className="w-8 h-8 rounded-full bg-[#E9F5D8] border border-[#7BC64F] text-sm shrink-0 hover:scale-110 transition-transform">{m.avatar}</button> ))}
-                                              <button onClick={() => setAssigningItemId(null)} className="ml-1 text-[#8C7B65]"><X size={16}/></button>
-                                          </div>
-                                      ) : (
-                                          <button 
-                                              onClick={() => { if (currentUser.isAdmin) { setAssigningItemId(String(item.id)); } else { handleClaim(item.id); } }} 
-                                              disabled={isLocked} 
-                                              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm active:scale-95 ${isMine ? 'bg-white border-2 border-[#7BC64F] text-[#7BC64F]' : item.owner && currentUser.isAdmin ? 'bg-[#E76F51] text-white' : isLocked ? 'bg-[#E0D8C0] text-white cursor-not-allowed' : 'bg-[#F4A261] text-white'}`}
-                                          >
-                                              {isMine ? '取消' : (item.owner && currentUser.isAdmin) ? '指派' : isLocked ? '鎖定' : '我帶'}
-                                          </button>
-                                      )
-                                  )}
-
-                                  {canDelete && (
-                                      <button 
-                                          type="button"
-                                          onClick={() => handleDeleteItem(item.id)}
-                                          className={`p-2 rounded-full transition-all cursor-pointer hover:bg-red-50 group ${!item.owner ? 'text-[#E0D8C0] hover:text-[#E76F51]' : 'text-[#E76F51]'}`}
-                                          title="刪除"
-                                      >
-                                          <Trash2 size={16} className={!item.owner ? '' : 'fill-current'}/>
-                                      </button>
-                                  )}
-                              </div>
-                          </div>
-                      );
-                  })}
-              </div>
+                          );
+                      })}
+                  </div>
+              )}
           </div>
       );
   };
